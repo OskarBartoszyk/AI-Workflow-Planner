@@ -29,11 +29,11 @@ Nie budujemy „AI do wszystkiego”. Budujemy:
 
 ## Dzień 1 — Definicja produktu i granic
 
-* [ ] Nazwa projektu i opis w 2–3 zdaniach
-* [ ] Lista problemów, które produkt rozwiązuje
-* [ ] Lista rzeczy, których produkt nie robi
-* [ ] Ustalenie 3 głównych użytkowników docelowych
-* [ ] Założenie repozytorium i struktury notatek
+* [X] Nazwa projektu i opis w 2–3 zdaniach
+* [X] Lista problemów, które produkt rozwiązuje
+* [X] Lista rzeczy, których produkt nie robi
+* [X] Ustalenie 3 głównych użytkowników docelowych
+* [X] Założenie repozytorium i struktury notatek
 
 **Kamień milowy:** jasno określony zakres produktu, bez rozlania się na „AI do wszystkiego”.
 
@@ -48,15 +48,32 @@ Nie budujemy „AI do wszystkiego”. Budujemy:
 
 ## Dzień 2 — Model danych produktu
 
-* [ ] Zdefiniowanie podstawowych encji: Task, Node, Edge, Workflow, Run
-* [ ] Spisanie pól, które będą potrzebne w każdej encji
-* [ ] Ustalenie, co będzie obowiązkowe, a co opcjonalne
-* [ ] Pierwsza wersja schematów danych
+* [X] Zdefiniowanie podstawowych encji: Task, Node, Edge, Workflow, Run
+* [X] Spisanie pól, które będą potrzebne w każdej encji
+* [X] Ustalenie, co będzie obowiązkowe, a co opcjonalne
+* [X] Pierwsza wersja schematów danych
 
 **Notatki:**
 
 ```text
+Nauczyłem się nowych bibliotek takich jak typing oraz dataclasses i zacząłem wykorzystywać je do projektowania silnie typowanych modeli danych.
 
+Rozwinąłem sposób myślenia o projektowaniu nowej technologii – zamiast skupiać się wyłącznie na implementacji, zacząłem najpierw definiować model domenowy i zależności pomiędzy encjami.
+
+Podjąłem pierwsze decyzje architektoniczne:
+- Graph stanowi uniwersalny model grafu.
+- Workflow dziedziczy po Graph i dodaje logikę wykonywania zadań.
+- Task dziedziczy po Node i reprezentuje pojedynczą jednostkę pracy.
+- Rozdzieliłem definicję workflow od jego wykonania (Run), co pozwoli w przyszłości przechowywać historię uruchomień i statusy.
+
+Zaimplementowałem pierwszą wersję modeli Node, Edge i Graph wraz z podstawowymi operacjami:
+- dodawanie i usuwanie węzłów,
+- dodawanie i usuwanie krawędzi,
+- wyszukiwanie węzłów,
+- obsługa identyfikatorów oraz grup,
+- automatyczne budowanie zależności pomiędzy zadaniami.
+
+Dodatkowo zaimplementowałem planowanie kolejności wykonywania zadań przy użyciu sortowania topologicznego (Kahn's Algorithm) oraz wykrywanie cykli zależności, co stanowi fundament przyszłego silnika workflow.
 
 ```
 
@@ -346,4 +363,3 @@ Nie budujemy „AI do wszystkiego”. Budujemy:
 * [ ] Zapis braków i ryzyk
 
 **Notatki:**
-
