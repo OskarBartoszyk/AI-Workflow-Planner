@@ -1,28 +1,183 @@
-from .graph import Node, Edge, Graph, Error, T
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar, Literal, Any, Callable, ClassVar
 import time
 import datetime
 import uuid
 import operator
+import json
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 
 
-# testing func
-def CallableFunc():
-    for i in range(5):
-        print("Thinking...")
-        time.sleep(1)
-        print("Doing task...")
-    print("Done")
+T = TypeVar("T")
 
+StatusLiteral = Literal["Done", "Inprogress", "completed"]
+
+
+@dataclass(slots=True, repr=False)
+class Error:
+    """Own Error message"""
+    description: str = ""
+
+    def __repr__(self) -> str:
+        if self.description:
+            return f"Error({self.description!r})"
+        return "Error"
+
+
+@dataclass(slots=True, repr=False)
+class Node(Generic[T]):
+    value: T
+    description: str | None = None
+    id: int | None = None
+    group: str | None = None
+    auto_id: bool = False  # If set to True, id is incremented automatically,
+    # also increments separately per group of nodes. id assigned in creation queue order
+    status: str | StatusLiteral | Error | None = None
+    completed: bool | None = None
+    short: bool = False  # if True show only value, if False show full description
+
+    def __repr__(self) -> str:
+        if self.short:
+            return f"Node({self.value!r})"
+        return (
+            f"Node(value={self.value!r}, description={self.description!r}, "
+            f"id={self.id!r}, group={self.group!r}, auto_id={self.auto_id!r}, "
+            f"status={self.status!r}, completed={self.completed!r}, short={self.short!r})"
+        )
+
+
+@dataclass(slots=True, repr=False)
+class Edge(Generic[T]):
+    source: Node[T]
+    target: Node[T]
+    description: str | None = None
+    source_desc: str | None = None
+    target_desc: str | None = None
+    weight: int | float | None = 0
+    directed: bool = False
+    short: bool = False
+    short_all: bool = False
+
+    @staticmethod
+    def _force_short_node(node: "Node[T]") -> str:
+        return f"Node({node.value!r})"
+
+    def __repr__(self) -> str:
+        if self.short_all:
+            src = self._force_short_node(self.source)
+            tgt = self._force_short_node(self.target)
+            return (
+                f"Source:{src} - Target:{tgt}, "
+                f"Weight:{self.weight!r}, Directed:{self.directed!r}"
+            )
+        if self.short:
+            return (
+                f"Source:{self.source!r} - Target:{self.target!r}, "
+                f"Weight:{self.weight!r}, Directed:{self.directed!r}"
+            )
+        return (
+            f"Edge(source={self.source!r}, target={self.target!r}, "
+            f"description={self.description!r}, source_desc={self.source_desc!r}, "
+            f"target_desc={self.target_desc!r}, weight={self.weight!r}, "
+            f"directed={self.directed!r}, short={self.short!r})"
+        )
+
+
+@dataclass(slots=True, repr=False)
+class Graph(Generic[T]):
+    name: str | None = None
+    nodes: list[Node[T]] = field(default_factory=list)
+    edges: list[Edge[T]] = field(default_factory=list)
+    short: bool = False
+    _id_counters: dict[str | None, int] = field(default_factory=dict, repr=False)
+
+    def add_node(self, node: Node[T]) -> Node[T]:
+        if node in self.nodes:
+            return node
+        if node.auto_id and node.id is None:
+            key = node.group
+            next_id = self._id_counters.get(key, 0) + 1
+            self._id_counters[key] = next_id
+            node.id = next_id
+        self.nodes.append(node)
+        return node
+
+    def add_edge(self, source: Node[T], target: Node[T], **kwargs) -> Edge[T]:
+        if source not in self.nodes:
+            self.add_node(source)
+        if target not in self.nodes:
+            self.add_node(target)
+        edge = Edge(source=source, target=target, **kwargs)
+        self.edges.append(edge)
+        return edge
+
+    def neighbors(self, node: Node[T]) -> list[Node[T]]:
+        result: list[Node[T]] = []
+        for e in self.edges:
+            if e.source is node:
+                result.append(e.target)
+            elif not e.directed and e.target is node:
+                result.append(e.source)
+        return result
+
+    def find_by_id(self, node_id: int, group: str | None = None) -> Node[T] | None:
+        for n in self.nodes:
+            if n.id == node_id and n.group == group:
+                return n
+        return None
+
+    def remove_edge(self, edge: Edge[T]) -> bool:
+        try:
+            self.edges.remove(edge)
+            return True
+        except ValueError:
+            return False
+
+    def remove_edges_between(self, source, target, directed_only=False) -> int:
+        before = len(self.edges)
+        def matches(e):
+            if e.source is source and e.target is target:
+                return True
+            if not directed_only and not e.directed:
+                return e.source is target and e.target is source
+            return False
+        self.edges = [e for e in self.edges if not matches(e)]
+        return before - len(self.edges)
+
+    def remove_node(self, node: Node[T], cascade: bool = True) -> bool:
+        if node not in self.nodes:
+            return False
+        connected = [e for e in self.edges if e.source is node or e.target is node]
+        if connected and not cascade:
+            raise ValueError(
+                f"Cannot remove node {node!r} - it has {len(connected)} "
+                f"connected edges. Use cascade=True."
+            )
+        for e in connected:
+            self.edges.remove(e)
+        self.nodes.remove(node)
+        return True
+
+    def __repr__(self) -> str:
+        if self.short:
+            return f"Graph({self.name!r}, nodes={len(self.nodes)}, edges={len(self.edges)})"
+        nodes_repr = ",\n    ".join(repr(n) for n in self.nodes)
+        edges_repr = ",\n    ".join(repr(e) for e in self.edges)
+        return (
+            f"Graph(name={self.name!r},\n"
+            f"  nodes=[\n    {nodes_repr}\n  ],\n"
+            f"  edges=[\n    {edges_repr}\n  ]\n"
+            f")"
+        )
+    
 
 class RunStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class CycleError(Exception):
@@ -92,12 +247,72 @@ class Workflow(Graph[T]):
     `build_all_groups`).
     """
 
+    history: list["Run[T]"] = field(default_factory=list, repr=False)
+    history_path: str | None = None
+
     def add_task(self, task: Task[T]) -> Task[T]:
         return self.add_node(task)
 
     def tasks_by_group(self, group: str | None) -> list[Task[T]]:
         """All Task nodes belonging to `group`, in the order they were added."""
         return [n for n in self.nodes if isinstance(n, Task) and n.group == group]
+
+    # ------------------------------------------------------------------
+    # Run history: every `Run` executed against this workflow records
+    # itself in `self.history` automatically (see Run.execute()) - but
+    # that's in-memory only, gone the moment the process ends.
+    #
+    # Set `workflow.history_path = "runs.jsonl"` for REAL persistence:
+    # every finished Run then also appends itself as one JSON line to
+    # that file, automatically, with no extra call needed - so history
+    # survives process restarts. `save_history()`/`load_history()` below
+    # are for a manual one-shot export/import of `self.history` instead.
+    # ------------------------------------------------------------------
+
+    def save_history(self, path: str) -> None:
+        """Serializes every recorded Run (see `self.history`) to JSON and
+        writes it to `path`, as one JSON array (overwrites `path`). This
+        is a read-only audit trail: Task references and live functions
+        aren't serializable, so this can't be used to reconstruct/replay
+        a Run - just to inspect what happened, later, from outside the
+        process. For automatic, ongoing persistence across restarts, set
+        `workflow.history_path` instead."""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump([run.to_dict() for run in self.history], f, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def load_history(path: str) -> list[dict[str, Any]]:
+        """Reads back a JSON array file written by `save_history`, as
+        plain dicts (not live Run/TaskRun objects)."""
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    @staticmethod
+    def load_history_file(path: str) -> list[dict[str, Any]]:
+        """Reads a JSONL file written via `workflow.history_path`
+        auto-persist (one JSON object per line, one per finished Run) into
+        a list of plain dicts. Safe to call even while another process is
+        still appending to the same file - only fully-written lines are
+        parsed, and a trailing partial line is silently ignored."""
+        records: list[dict[str, Any]] = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    break  # trailing/partial line being written concurrently - stop here
+        return records
+
+    def clear_history(self) -> int:
+        """Drops all recorded Runs from `self.history`. Returns how many
+        were removed. Does not touch anything already saved to disk (via
+        `save_history` or `history_path` auto-persist)."""
+        count = len(self.history)
+        self.history = []
+        return count
 
     # ------------------------------------------------------------------
     # Query API: find tasks by attribute without writing a manual loop.
@@ -821,6 +1036,51 @@ class TaskRun(Generic[T]):
             f"attempt={self.attempt!r}, duration={self.duration!r})"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Plain-dict (JSON-serializable) view of this TaskRun, for
+        Workflow.save_history() / any external logging/dashboard."""
+        return {
+            "task": self.task.value,
+            "task_id": self.task.id,
+            "group": self.task.group,
+            "status": self.status.value,
+            "attempt": self.attempt,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration": self.duration,
+            "error": self.error.description if self.error else None,
+        }
+
+
+@dataclass(slots=True, repr=False)
+class RunPreview(Generic[T]):
+    """The result of `Run.dry_run()`: what WOULD happen if you called
+    `execute()` now, computed without touching a single task. Print it
+    (or show it in a UI) to get human sign-off before actually running."""
+
+    workflow_name: str | None
+    group: str | None
+    levels: list[list[Task[T]]] = field(default_factory=list)
+    issues: list[ValidationIssue] = field(default_factory=list)
+
+    @property
+    def is_safe_to_run(self) -> bool:
+        return not any(i.level == "error" for i in self.issues)
+
+    def __repr__(self) -> str:
+        lines = [f"Podglad Run-a: workflow={self.workflow_name!r} group={self.group!r}"]
+        if self.issues:
+            lines.append("  Problemy walidacji:")
+            for issue in self.issues:
+                lines.append(f"    {issue}")
+        else:
+            lines.append("  Brak problemow walidacji.")
+        lines.append("  Kolejnosc wykonania (poziomy rownoleglosci):")
+        for idx, level in enumerate(self.levels, start=1):
+            lines.append(f"    Poziom {idx}: {[t.value for t in level]}")
+        lines.append(f"  Bezpieczne do uruchomienia: {self.is_safe_to_run}")
+        return "\n".join(lines)
+
 
 @dataclass(slots=True, repr=False)
 class Run(Generic[T]):
@@ -844,6 +1104,51 @@ class Run(Generic[T]):
             f"tasks={len(self.tasks)!r}, error={self.error!r})"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Plain-dict (JSON-serializable) view of this Run, for
+        Workflow.save_history() / any external logging/dashboard. Cannot
+        be turned back into a live Run (Task references and functions
+        aren't serializable) - it's a read-only record."""
+        return {
+            "id": self.id,
+            "workflow": self.workflow.name if self.workflow else None,
+            "status": self.status.value,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration": (
+                (self.finished_at - self.started_at).total_seconds()
+                if self.started_at and self.finished_at
+                else None
+            ),
+            "error": self.error.description if self.error else None,
+            "tasks": [tr.to_dict() for tr in self.tasks],
+        }
+
+    def dry_run(self, group: str | None = None) -> "RunPreview[T]":
+        """Builds the plan WITHOUT executing anything: runs
+        `workflow.validate()`/`validate_group()` and computes the
+        level-by-level execution order, returning a `RunPreview` a human
+        can inspect (print it, or check `.is_safe_to_run`) before deciding
+        whether to actually call `execute()`."""
+        if self.workflow is None:
+            raise ValueError("Run.workflow is not set - nothing to preview.")
+
+        issues = (
+            self.workflow.validate_group(group) if group is not None else self.workflow.validate()
+        )
+        try:
+            levels = (
+                self.workflow.plan_levels_group(group)
+                if group is not None
+                else self.workflow.plan_levels()
+            )
+        except CycleError:
+            levels = []
+
+        return RunPreview(
+            workflow_name=self.workflow.name, group=group, levels=levels, issues=issues
+        )
+
     def on(self, event: str, callback: Callable[..., Any]) -> "Run[T]":
         """Register `callback` to be called whenever `event` fires. Returns
         self, so calls can be chained: Run(workflow=w).on(...).on(...).execute().
@@ -851,6 +1156,8 @@ class Run(Generic[T]):
         Available events:
           run_started(run)
           run_finished(run)
+          run_cancelled(run)        - fired instead of run_finished when a
+                                       human declines a confirm=True dry-run
           validation_failed(issues: list[ValidationIssue])
           level_started(level: list[Task])
           level_finished(level: list[Task], task_runs: list[TaskRun])
@@ -910,7 +1217,25 @@ class Run(Generic[T]):
 
         return task_run
 
-    def execute(self, group: str | None = None, validate: bool = True) -> "Run[T]":
+    def _persist_to_history_file(self) -> None:
+        """If `self.workflow.history_path` is set, appends this Run as one
+        JSON line to that file. Called automatically at every exit point
+        of `execute()` - cancelled, validation failed, cycle detected, or
+        finished normally - so history survives even if the process ends
+        right after. A failure here is logged, not raised: a broken disk/
+        permission problem must never take down the actual workflow run."""
+        path = self.workflow.history_path if self.workflow is not None else None
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(self.to_dict(), ensure_ascii=False) + "\n")
+        except Exception as exc:
+            print(f"[Run {self.id}] failed to persist history to {path!r}: {exc!r}")
+
+    def execute(
+        self, group: str | None = None, validate: bool = True, confirm: bool = False
+    ) -> "Run[T]":
         """Runs `self.workflow` (or just `group` within it) level by level,
         in parallel within each level. Stops after a level that contains a
         failed task (so nothing depending on it runs), and marks the whole
@@ -924,14 +1249,44 @@ class Run(Generic[T]):
         issues listed in `run.error`, instead of a confusing mid-run
         failure. Warning-level issues (e.g. a task with no function) do
         not block execution.
+
+        If `confirm=True`, `dry_run()` runs first, gets printed, and the
+        terminal asks the human to type 'y' before anything executes. If
+        they decline, the Run ends as `RunStatus.CANCELLED` (fires
+        `run_cancelled` instead of `run_finished`) without touching a
+        single task. Meant for CLI/notebook use - for a real frontend,
+        call `dry_run()` yourself and wire the confirmation to a UI button
+        instead.
+
+        Every Run is appended to `self.workflow.history` the moment it
+        starts (see `Workflow.history`) - and since it's the same object,
+        its recorded status keeps updating in place as the Run progresses.
+        If `self.workflow.history_path` is set, the Run is ALSO appended
+        to that file on disk (one JSON line per Run) the moment it ends -
+        automatically, no extra call needed - so history survives even if
+        the process exits right after.
         """
         if self.workflow is None:
             raise ValueError("Run.workflow is not set - nothing to execute.")
+
+        if confirm:
+            preview = self.dry_run(group=group)
+            print(preview)
+            answer = input("Uruchomic ten workflow? [y/N]: ").strip().lower()
+            if answer != "y":
+                self.status = RunStatus.CANCELLED
+                self.started_at = datetime.datetime.now()
+                self.finished_at = self.started_at
+                self.workflow.history.append(self)
+                self._persist_to_history_file()
+                self._emit("run_cancelled", self)
+                return self
 
         self.status = RunStatus.RUNNING
         self.started_at = datetime.datetime.now()
         self.tasks = []
         self.error = None
+        self.workflow.history.append(self)
         self._emit("run_started", self)
 
         if validate:
@@ -945,6 +1300,7 @@ class Run(Generic[T]):
                 self.status = RunStatus.FAILED
                 self.error = Error("; ".join(str(i) for i in errors))
                 self.finished_at = datetime.datetime.now()
+                self._persist_to_history_file()
                 self._emit("validation_failed", issues)
                 self._emit("run_finished", self)
                 return self
@@ -959,6 +1315,7 @@ class Run(Generic[T]):
             self.status = RunStatus.FAILED
             self.error = Error(str(exc))
             self.finished_at = datetime.datetime.now()
+            self._persist_to_history_file()
             self._emit("run_finished", self)
             return self
 
@@ -978,5 +1335,6 @@ class Run(Generic[T]):
 
         self.status = RunStatus.FAILED if failed else RunStatus.SUCCESS
         self.finished_at = datetime.datetime.now()
+        self._persist_to_history_file()
         self._emit("run_finished", self)
         return self
