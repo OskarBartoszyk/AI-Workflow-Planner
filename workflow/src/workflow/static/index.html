@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>taskgraph · live dashboard</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="dark">
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span><span>taskgraph</span></div>
+    <span class="summary" id="summary"></span>
+    <div class="spacer"></div>
+    <div class="seg">
+      <button id="dir-lr" title="Flow left to right">&#8594;</button>
+      <button id="dir-tb" title="Flow top to bottom">&#8595;</button>
+    </div>
+    <button class="ghost-btn" id="theme-btn" title="Toggle theme"></button>
+    <button class="ghost-btn" id="panel-btn" title="Toggle side panel">&#9636; panel</button>
+  </header>
+
+  <div class="main">
+    <div class="panes" id="panes"></div>
+
+    <aside class="panel" id="panel">
+      <div class="panel-head">
+        <span class="panel-dot" id="panel-dot"></span>
+        <span class="panel-name" id="panel-name"></span>
+        <span class="panel-sub">workflow</span>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="panel-close" title="Close (Esc)">&#10005;</button>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+  </div>
+
+  <footer class="dock" id="dock"></footer>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

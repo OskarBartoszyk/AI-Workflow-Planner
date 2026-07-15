@@ -1,8 +1,0 @@
-[] Kazdy RUN taska musi być śledzony cały czas statusem - później dla frontendu 
-[] Zaspis historii runów
-[] Dry-Run - System buduje sam DAG, pokazuje go człowiekowi do akceptacji 
-
-
-[] Gdy powstanie fronted to mozna dodac "playgraund" gdzie uzytkownicy sami moga sobie tworzy szybkie grafy, wlasne taski itd nawet nie przy pomocy mojej biblioteki, ale samego frontendu
-po instalacji np biblioteki wystarczy dodac Run.playground albo Run("playground) aby móc bawić się nodami w stylu obsidian. Nie wymaga to integracji niczego. Otwiera sie wedy localhost i mozna sie bawic.
-

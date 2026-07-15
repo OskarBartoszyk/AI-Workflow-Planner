@@ -1,22 +1,23 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "workflow"
 version = "0.1.0"
-description = "Workflow/DAG execution library. Task management and full control over created graphs"
+description = "A task-graph / workflow orchestration library with a live browser dashboard."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-authors = [
-    { name = "Oskar B" }
+license = { text = "MIT" }
+authors = [{ name = "your-name" }]
+dependencies = [] 
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workflow"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/workflow",
+  "README.md",
+  "pyproject.toml",
 ]
-
-dependencies = []
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]

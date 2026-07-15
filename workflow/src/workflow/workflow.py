@@ -1009,6 +1009,41 @@ class Workflow(Graph[T]):
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 list(pool.map(_run_one, level))
 
+    # ------------------------------------------------------------------
+    # Live dashboard: workflow.visualize() launches (or attaches to) a
+    # local browser dashboard for this workflow - see dashboard.py. This
+    # is the ONLY place workflow.py touches anything socket/http/browser
+    # related, and only lazily (on first call), so importing workflow.py
+    # itself never pulls in http.server/webbrowser for scripts that don't
+    # use the dashboard at all.
+    # ------------------------------------------------------------------
+
+    def visualize(self, port: int = 8420, open_browser: bool = True) -> str:
+        """Launches the live task-graph dashboard for this workflow in
+        your browser (starting a local server on first call; reused for
+        every later call in this process, so several workflows can share
+        one dashboard).
+
+        The dashboard shows this workflow's tasks and dependency graph,
+        colored by `run_status` and clustered by `Task.group`, and updates
+        in real time - no extra wiring needed - the moment any `Run`
+        executes against this workflow (via Server-Sent Events).
+
+        Call `.visualize()` on more than one workflow in the same process
+        and they all show up as separate, resizable/hideable panes in the
+        SAME dashboard (auto split-screen, with a dock to minimize/hide
+        panes) - you don't need to do anything differently.
+
+        Returns the dashboard URL (e.g. "http://127.0.0.1:8420/"). Pass
+        `open_browser=False` to just get the URL back without popping a
+        new browser tab (the URL is also always printed).
+        """
+        try:
+            from . import dashboard as _dashboard
+        except ImportError:
+            import dashboard as _dashboard
+        return _dashboard.register(self, Run=Run, port=port, open_browser=open_browser)
+
 
 @dataclass(slots=True, repr=False)
 class TaskRun(Generic[T]):
